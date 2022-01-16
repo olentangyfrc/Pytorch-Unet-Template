@@ -1,0 +1,8 @@
+__pycache__/
+.vscode/
+logs/*
+weights/*
+logs/*
+data/labelme_data/*
+data/training_data/*
+*.png

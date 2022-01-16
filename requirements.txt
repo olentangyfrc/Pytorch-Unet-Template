@@ -1,0 +1,7 @@
+tqdm
+opencv-python
+torch
+pytorch_lightning
+segmentation_models_pytorch
+albumentations
+imgaug
