@@ -1,6 +1,6 @@
 # Module that handles data samples while training and validating
 
-from data_reading import load_img, load_labelme_data
+from data_loading import load_img, load_labelme_data
 from typing import Callable, Optional
 
 from pytorch_lightning import LightningDataModule

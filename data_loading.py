@@ -50,6 +50,9 @@ def load_labelme_data(path, scale, classes):
                 elif shape['shape_type'] == 'polygon':
                     img[class_idx] = cv2.fillPoly(
                         img[class_idx], [points], color)
+                elif shape['shape_type'] == 'line':
+                    img[class_idx] = cv2.line(
+                        img[class_idx], points[0], points[1], color, 3)
                 else:
                     raise(Exception("Unknown shape type"))
 
