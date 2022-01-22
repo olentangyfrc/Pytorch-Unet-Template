@@ -100,8 +100,10 @@ class SegModel(LightningModule):
             A.BasicTransform: The preprocessing transform
         """
 
-        mean = [60, 60, 60]
-        std = [60, 60, 60]
+        mean = std = 60
+        if self.channels == 3:
+            mean = [60, 60, 60]
+            std = [60, 60, 60]
 
         _transform = [
             A.Lambda(image=make_divisible, mask=make_divisible),
