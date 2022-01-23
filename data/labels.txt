@@ -1,1 +1,4 @@
-ball
+__ignore__
+_background_
+left
+right

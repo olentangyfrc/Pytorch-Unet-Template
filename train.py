@@ -24,7 +24,8 @@ if not torch.cuda.is_available():
 
 # List the classes from your dataset that you want to train on
 CLASSES = [
-    "ball"
+    "left",
+    "right"
 ]
 
 # Whether to use 16 bit precision. Speeds up training on newer GPUs.
@@ -38,7 +39,7 @@ BENCHMARK = True if GPUS is not None else False
 
 # How many samples to look at at a time.
 # Large batch size will cause memory errors
-BATCH_SIZE = 16
+BATCH_SIZE = 4
 
 # Number of data loader workers. More workers uses more RAM but may be faster.
 NUM_WORKERS = 4
@@ -99,11 +100,11 @@ if __name__ == "__main__":
     tb_logger.experiment.add_image(
         "Training input", img_tensor=normalize(training_sample[0][0, :3])/255)
     tb_logger.experiment.add_image(
-        "Training label", img_tensor=training_sample[1][0, :3]*.9)
+        "Training label", img_tensor=training_sample[1][0, :1]*.9)
     tb_logger.experiment.add_image(
         "Validation input", img_tensor=normalize(validation_sample[0][0, :3])/255)
     tb_logger.experiment.add_image(
-        "Validation label", img_tensor=validation_sample[1][0, :3]*.9)
+        "Validation label", img_tensor=validation_sample[1][0, :1]*.9)
 
     # Stop early if val_iou hasn't improved
     early_stop_callback = EarlyStopping(

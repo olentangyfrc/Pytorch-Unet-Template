@@ -24,7 +24,7 @@ DATASET_SPLIT = {
 DATASET_SEED = 8766
 
 # How much to scale the image while training
-SCALE = 0.25
+SCALE = 1
 
 # Whether the input is grayscale
 CHANNELS = 3
