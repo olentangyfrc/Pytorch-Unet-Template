@@ -51,9 +51,7 @@ class SegModel(LightningModule):
         outputs = self.model(inputs)
 
         # Compute loss and iou for each class and average them
-        loss = torch.zeros(1, device=inputs.device)
-        for i in range(self.num_classes):
-            loss += self.criterion(outputs[:, i], labels[:, i])
+        loss = self.criterion(outputs, labels)
 
         # Log IOU and loss
         self.log("train_loss", loss, on_step=False, on_epoch=True)
