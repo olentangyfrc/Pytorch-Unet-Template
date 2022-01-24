@@ -1,5 +1,6 @@
 # Training script
 
+from socketserver import ThreadingMixIn
 from pytorch_lightning import Trainer
 from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
@@ -14,7 +15,7 @@ import numpy as np
 ## Can be changed with command line args too    ##
 ##################################################
 
-# Where labelme_data is
+# Where labelme_data is. Should be "data/" unless you move that folder to another drive
 DATA_DIR = 'data/'
 
 # Which GPU IDs to use. Set to None to use CPU
@@ -39,7 +40,7 @@ BENCHMARK = True if GPUS is not None else False
 
 # How many samples to look at at a time.
 # Large batch size will cause memory errors
-BATCH_SIZE = 4
+BATCH_SIZE = 8
 
 # Number of data loader workers. More workers uses more RAM but may be faster.
 NUM_WORKERS = 4
@@ -52,6 +53,11 @@ def normalize(img):
     img = np.clip(img, 0, 255)
     return img
 
+def labels_to_rgb(labels):
+    img = np.zeros((3, *labels.shape[1:]), 'uint8')
+    num_channels_displayed = min(3, labels.shape[0])
+    img[:num_channels_displayed] = labels[:num_channels_displayed]
+    return img * 255
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
@@ -100,11 +106,11 @@ if __name__ == "__main__":
     tb_logger.experiment.add_image(
         "Training input", img_tensor=normalize(training_sample[0][0, :3])/255)
     tb_logger.experiment.add_image(
-        "Training label", img_tensor=training_sample[1][0, :1]*.9)
+        "Training label", img_tensor=labels_to_rgb(training_sample[1][0]))
     tb_logger.experiment.add_image(
         "Validation input", img_tensor=normalize(validation_sample[0][0, :3])/255)
     tb_logger.experiment.add_image(
-        "Validation label", img_tensor=validation_sample[1][0, :1]*.9)
+        "Validation label", img_tensor=labels_to_rgb(validation_sample[1][0]))
 
     # Stop early if val_iou hasn't improved
     early_stop_callback = EarlyStopping(
