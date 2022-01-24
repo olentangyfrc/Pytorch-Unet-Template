@@ -86,7 +86,7 @@ class SegModel(LightningModule):
 
         iou = torch.zeros(1, device=self.device)
         for c in range(self.num_classes):
-            iou += intersections[c] / unions[c]
+            iou += intersections[c] / unions[c] / self.num_classes
 
         self.log('val_iou', iou.item())
 
@@ -118,6 +118,6 @@ class SegModel(LightningModule):
         # All command line arguments for the model
         parser = parent_parser.add_argument_group("LitSegModel")
         parser.add_argument(
-            '--encoder', type=str, default='se_resnext50_32x4d', choices=smp.encoders.encoders.keys())
+            '--encoder', type=str, default='mobilenet_v2', choices=smp.encoders.encoders.keys())
         parser.add_argument('--lr', type=float, default=0.00005)
         return parent_parser
