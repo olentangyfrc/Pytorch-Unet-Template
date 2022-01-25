@@ -1,11 +1,10 @@
 # Module that handles data samples while training and validating
 
 from data_loading import load_img, load_labelme_data
-from typing import Callable, Optional
+from typing import Optional
 
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset
-import albumentations as A
 import numpy as np
 import os
 from torch.utils.data import Dataset as BaseDataset
@@ -103,9 +102,8 @@ class DataModule(LightningDataModule):
         num_workers: int = 0,
         pin_memory: bool = False,
         classes: list = [],
-        preprocessing_augmentation: Optional[Callable[[
-            int], A.BasicTransform]] = None,
-        validation_augmentation: Optional[A.BasicTransform] = None,
+        preprocessing_augmentation = None,
+        validation_augmentation = None,
         persistent_workers: Optional[bool] = None
     ):
         super().__init__()
@@ -125,6 +123,10 @@ class DataModule(LightningDataModule):
         self.data_train: Optional[Dataset] = None
         self.data_val: Optional[Dataset] = None
         self.data_test: Optional[Dataset] = None
+
+        self.loader_train = None
+        self.loader_val = None
+        self.loader_test = None
 
     def prepare_data(self):
         """Converts the inputs into smaller, easier to manage numpy files"""
@@ -195,38 +197,45 @@ class DataModule(LightningDataModule):
         )
 
     def train_dataloader(self):
-        return DataLoader(
-            dataset=self.data_train,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            pin_memory=self.pin_memory,
-            persistent_workers=self.persistent_workers,
-            shuffle=True,
-        )
+        if self.loader_train is None:
+            self.loader_train = DataLoader(
+                dataset=self.data_train,
+                batch_size=self.batch_size,
+                num_workers=self.num_workers,
+                pin_memory=self.pin_memory,
+                persistent_workers=self.persistent_workers,
+                shuffle=True,
+            )
+        return self.loader_train
 
     def val_dataloader(self):
-        return DataLoader(
-            dataset=self.data_val,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            pin_memory=self.pin_memory,
-            persistent_workers=self.persistent_workers,
-            shuffle=False,
-        )
+        if self.loader_val is None:
+            self.loader_val = DataLoader(
+                dataset=self.data_val,
+                batch_size=self.batch_size,
+                num_workers=self.num_workers,
+                pin_memory=self.pin_memory,
+                persistent_workers=self.persistent_workers,
+                shuffle=False,
+            )
+        return self.loader_val
 
     def test_dataloader(self):
-        return DataLoader(
-            dataset=self.data_test,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            pin_memory=self.pin_memory,
-            persistent_workers=self.persistent_workers,
-            shuffle=False,
-        )
+        if self.loader_test is None:
+            self.loader_test = DataLoader(
+                dataset=self.data_test,
+                batch_size=self.batch_size,
+                num_workers=self.num_workers,
+                pin_memory=self.pin_memory,
+                persistent_workers=self.persistent_workers,
+                shuffle=False,
+            )
+        return self.loader_test
 
     # The following is the list of augmentations applied to training samples.
     # Look up the Albumentations API to view available augmentations.
     def get_training_augmentation(self):
+        import albumentations as A
         train_transform = [
 
             A.HorizontalFlip(p=0.5),
@@ -265,6 +274,7 @@ class DataModule(LightningDataModule):
         return A.Compose(train_transform)
 
     def get_validation_augmentation(self):
+        import albumentations as A
         if self.validation_augmentation is not None:
             return self.validation_augmentation
         return A.Compose([])
