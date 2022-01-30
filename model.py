@@ -23,13 +23,13 @@ def make_divisible(x, **kwargs):
 
 
 class SegModel(LightningModule):
-    def __init__(self, in_ch, num_classes, encoder, lr, **kwargs):
+    def __init__(self, in_ch, num_classes, encoder, lr, initial_weights='imagenet', **kwargs):
         super(SegModel, self).__init__()
 
         self.model = smp.FPN(
             in_channels=in_ch,
             encoder_name=encoder,
-            encoder_weights='imagenet',
+            encoder_weights=initial_weights,
             classes=num_classes,
             activation='sigmoid'
         )
