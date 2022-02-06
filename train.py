@@ -1,6 +1,5 @@
 # Training script
 
-from socketserver import ThreadingMixIn
 from pytorch_lightning import Trainer
 from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
