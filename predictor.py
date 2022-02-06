@@ -1,4 +1,7 @@
-from .model import SegModel
+try:
+    from .model import SegModel
+except:
+    from model import SegModel
 from glob import glob
 import numpy as np
 import torch
