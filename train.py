@@ -5,7 +5,7 @@ from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from datamodule import CHANNELS, DataModule
-from model import SegModel
+from model import SegModelLightning
 import torch
 import numpy as np
 
@@ -63,7 +63,7 @@ if __name__ == "__main__":
     parser = ArgumentParser()
 
     # Add command line args
-    parser = SegModel.add_model_specific_args(parser)
+    parser = SegModelLightning.add_model_specific_args(parser)
     parser = Trainer.add_argparse_args(parser)
 
     # Default from command line args
@@ -78,7 +78,7 @@ if __name__ == "__main__":
 
     # Initialize model from command line args
     dict_args = vars(args)
-    model = SegModel(
+    model = SegModelLightning(
         in_ch=CHANNELS,
         num_classes=len(CLASSES),
         **dict_args

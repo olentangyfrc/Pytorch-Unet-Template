@@ -238,7 +238,7 @@ class DataModule(LightningDataModule):
         import albumentations as A
         train_transform = [
 
-            A.HorizontalFlip(p=0.5),
+            # A.HorizontalFlip(p=0.5),
 
             A.ShiftScaleRotate(scale_limit=0.2, rotate_limit=10, shift_limit=0.2, p=1),
 

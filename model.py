@@ -5,34 +5,16 @@ from pytorch_lightning.utilities.types import EPOCH_OUTPUT
 import segmentation_models_pytorch as smp
 import albumentations as A
 import torch
-import numpy as np
+from model_prod import SegModel
 
 
-def to_tensor(x, **kwargs):
-    if len(x.shape) == 2:
-        x = x[..., np.newaxis]
-    return x.transpose(2, 0, 1).astype('float32')
 
 
-def make_divisible(x, **kwargs):
-    if len(x.shape) == 2:
-        x = x[..., np.newaxis]
-    w_pad = (32 - x.shape[1]) % 32
-    h_pad = (32 - x.shape[0]) % 32
-    return np.pad(x, ((0, h_pad), (0, w_pad), (0, 0)))
-
-
-class SegModel(LightningModule):
+class SegModelLightning(LightningModule):
     def __init__(self, in_ch, num_classes, encoder, lr, initial_weights='imagenet', **kwargs):
-        super(SegModel, self).__init__()
+        super(SegModelLightning, self).__init__()
 
-        self.model = smp.FPN(
-            in_channels=in_ch,
-            encoder_name=encoder,
-            encoder_weights=initial_weights,
-            classes=num_classes,
-            activation='sigmoid'
-        )
+        self.model_prod = SegModel(in_ch, num_classes, encoder, initial_weights)
 
         self.save_hyperparameters()
 
@@ -43,12 +25,12 @@ class SegModel(LightningModule):
         self.channels = in_ch
 
     def forward(self, x) -> torch.Tensor:
-        return self.model.forward(x)
+        return self.model_prod.forward(x)
 
     def training_step(self, batch, batch_idx):
         inputs, labels = batch
 
-        outputs = self.model(inputs)
+        outputs = self.model_prod(inputs)
 
         # Compute loss and iou for each class and average them
         loss = self.criterion(outputs, labels)
@@ -61,7 +43,7 @@ class SegModel(LightningModule):
         inputs, labels = batch
 
         # Masks out uncertain pixels. No loss will be computed for them
-        outputs = self.model(inputs)
+        outputs = self.model_prod(inputs)
 
         # Compute iou for each class and average
         intersections = torch.zeros(self.num_classes, device=inputs.device)
@@ -89,7 +71,7 @@ class SegModel(LightningModule):
         self.log('val_iou', iou.item())
 
     def configure_optimizers(self):
-        return torch.optim.Adam([dict(params=self.model.parameters(), lr=self.learning_rate)])
+        return torch.optim.Adam([dict(params=self.model_prod.parameters(), lr=self.learning_rate)])
 
     def get_preprocessing(self):
         """Generates preprocessing transform
@@ -98,15 +80,9 @@ class SegModel(LightningModule):
             A.BasicTransform: The preprocessing transform
         """
 
-        mean = std = 60
-        if self.channels == 3:
-            mean = [60, 60, 60]
-            std = [60, 60, 60]
-
         _transform = [
-            A.Lambda(image=make_divisible, mask=make_divisible),
-            A.Normalize(mean=mean, std=std, max_pixel_value=1),
-            A.Lambda(image=to_tensor, mask=to_tensor),
+            A.Lambda(image=self.model_prod.normalize_image),
+            A.Lambda(image=self.model_prod.fix_shape, mask=self.model_prod.fix_shape),
         ]
 
         return A.Compose(_transform)
