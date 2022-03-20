@@ -40,10 +40,11 @@ class SegModel(Module):
         
 
     @staticmethod
-    def load_from_checkpoint(path, map_location=None, **kwargs):
+    def load_from_checkpoint(path, map_location=None, initial_weights=None, **kwargs):
         checkpoint = torch.load(path, map_location=map_location)
         hyper_parameters = checkpoint["hyper_parameters"]
-
+        hyper_parameters["initial_weights"] = initial_weights
+ 
         # if you want to restore any hyperparameters, you can pass them too
         model = SegModel(**hyper_parameters)
 
