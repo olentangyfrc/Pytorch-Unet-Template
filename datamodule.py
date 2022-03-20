@@ -6,11 +6,21 @@ from typing import Optional
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset
 import numpy as np
+import cv2
 import os
 from torch.utils.data import Dataset as BaseDataset
 import glob
 import hashlib
 from tqdm import tqdm
+
+def flip_left_right(image, **kwargs):
+    image = np.flip(image,1)
+    return image
+
+def flip_channels(image, **kwargs):
+    image = np.flip(image,1)
+    image = np.flip(image,2)
+    return image
 
 
 # Probability of being assigned to each dataset
@@ -238,9 +248,9 @@ class DataModule(LightningDataModule):
         import albumentations as A
         train_transform = [
 
-            A.HorizontalFlip(p=0.5),
+            A.Lambda(image = flip_left_right, mask = flip_channels, p=0.5),
 
-            A.ShiftScaleRotate(scale_limit=0.2, rotate_limit=10, shift_limit=0.2, p=1),
+            A.ShiftScaleRotate(scale_limit=0.2, rotate_limit=10, shift_limit=0.2, border_mode=cv2.BORDER_CONSTANT, mask_value=(0,0), value=(0,0,0), p=1),
 
             A.GaussNoise(p=0.2),
             A.Perspective(p=0.5),

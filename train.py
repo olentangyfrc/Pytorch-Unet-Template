@@ -131,6 +131,7 @@ if __name__ == "__main__":
     # Init trainer from command line args
     trainer = Trainer.from_argparse_args(
         args,
+        max_epochs=10000,
         logger=tb_logger,
         callbacks=[checkpoint_callback, early_stop_callback]
     )
@@ -139,4 +140,4 @@ if __name__ == "__main__":
     trainer.fit(model, datamodule)
 
     # Log best val_iou for this set of hyperparameters
-    trainer.logger.log_metrics({'hp_metric': early_stop_callback.best_score})
+    trainer.logger.metrics({'hp_metric': early_stop_callback.best_score})
