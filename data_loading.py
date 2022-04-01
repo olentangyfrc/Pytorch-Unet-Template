@@ -31,8 +31,9 @@ def load_labelme_data(path, scale, classes):
     with open(path) as f:
         data = json.load(f)
 
-        output = np.zeros((len(classes), int(
-            data["imageHeight"] * scale), int(data["imageWidth"] * scale)), 'uint8')
+        h, w = int(data["imageHeight"] * scale), int(data["imageWidth"] * scale)
+
+        output = np.zeros((len(classes), h, w), 'uint8')
 
         def draw_shape(img, shape, class_indicies, color):
             """
@@ -52,7 +53,7 @@ def load_labelme_data(path, scale, classes):
                         img[class_idx], [points], color)
                 elif shape['shape_type'] == 'line':
                     img[class_idx] = cv2.line(
-                        img[class_idx], points[0], points[1], color, 3)
+                        img[class_idx], points[0], points[1], color, int((h + w) / 300))
                 else:
                     raise(Exception("Unknown shape type"))
 

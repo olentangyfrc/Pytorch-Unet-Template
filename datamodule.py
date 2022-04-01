@@ -247,7 +247,7 @@ class DataModule(LightningDataModule):
     def get_training_augmentation(self):
         import albumentations as A
         train_transform = [
-
+            A.Resize(480, 640),
             A.Lambda(image = flip_left_right, mask = flip_channels, p=0.5),
 
             A.ShiftScaleRotate(scale_limit=0.2, rotate_limit=10, shift_limit=0.2, border_mode=cv2.BORDER_CONSTANT, mask_value=(0,0), value=(0,0,0), p=1),
@@ -287,4 +287,4 @@ class DataModule(LightningDataModule):
         import albumentations as A
         if self.validation_augmentation is not None:
             return self.validation_augmentation
-        return A.Compose([])
+        return A.Compose([A.Resize(480, 640)])
