@@ -1,6 +1,7 @@
 __pycache__/
 .vscode/
 logs/*
+results/*
 weights/*
 logs/*
 data/labelme_data/*
