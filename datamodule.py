@@ -10,8 +10,8 @@ import cv2
 import os
 from torch.utils.data import Dataset as BaseDataset
 import glob
-import hashlib
 from tqdm import tqdm
+import re
 
 def flip_left_right(image, **kwargs):
     image = np.flip(image,1)
@@ -22,25 +22,21 @@ def flip_channels(image, **kwargs):
     image = np.flip(image,2)
     return image
 
+# Names of the videos to be used as validation
+VALIDATION_VIDEOS = [
+    "ringlightpictures",
+    "hallway"
+]
 
-# Probability of being assigned to each dataset
-DATASET_SPLIT = {
-    "train": 0.85,
-    "val": 0.15
-}
-
-# Seed for dataset assignment
-DATASET_SEED = 8766
-
-# How much to scale the image while training
+# How much to scale the image while training. Useful for speeding up training and detection
 SCALE = 1
 
-# Whether the input is grayscale
+# How many channels the data is. 3 for RGB, 1 for grayscale
 CHANNELS = 3
 
 
 class Dataset(BaseDataset):
-    """Dataset. Read images, apply augmentation and preprocessing transformations.
+    """Dataset that loads data for training. Read images, apply augmentation and preprocessing transformations.
 
     Args:
         images_dir (str): path to images folder
@@ -62,6 +58,7 @@ class Dataset(BaseDataset):
             shuffle=True,
 
     ):
+        # Initialize lists of all samples
         self.ids = glob.glob(image_dir + "/*.npy")
         self.image_fps = [os.path.join(image_dir, os.path.basename(image_id))
                           for image_id in self.ids]
@@ -77,22 +74,24 @@ class Dataset(BaseDataset):
         self.preprocessing = preprocessing
 
     def __getitem__(self, i):
-        # read data
+        """ Called to get each batch before each step """
+
+        # Read data
         image_fp, mask_fp = self.samples[i]
         image = np.load(image_fp, mmap_mode='r')
         mask = np.load(mask_fp, mmap_mode='r')
 
-        # apply augmentations
+        # Apply augmentations
         if self.augmentation:
             sample = self.augmentation(image=image, mask=mask)
             image, mask = sample['image'], sample['mask']
 
-        # apply preprocessing
+        # Apply preprocessing
         if self.preprocessing:
             sample = self.preprocessing(image=image, mask=mask)
             image, mask = sample['image'], sample['mask']
 
-        return image.astype('float32'), mask.astype('uint8')
+        return image, mask
 
     def __len__(self):
         return len(self.samples)
@@ -129,6 +128,7 @@ class DataModule(LightningDataModule):
         self.persistent_workers = persistent_workers
         if self.persistent_workers is None:
             self.persistent_workers = num_workers > 0
+        self.prepared = False
         
         self.data_train: Optional[Dataset] = None
         self.data_val: Optional[Dataset] = None
@@ -139,51 +139,67 @@ class DataModule(LightningDataModule):
         self.loader_test = None
 
     def prepare_data(self):
-        """Converts the inputs into smaller, easier to manage numpy files"""
+        """ Converts the labelme data to numpy training files """
 
-        json_paths = glob.glob(
-            self.data_dir + "labelme_data/**/*.json", recursive=True)
-        print("Verifying and updating training data files...")
+        if not self.prepared:
+            # Get a list of all labeled examples
+            json_paths = glob.glob(
+                self.data_dir + "labelme_data/**/*.json", recursive=True)
+            print("Verifying and updating training data files...")
 
-        for json_path in tqdm(json_paths):
+            # Get names of the different videos
+            frames = {}
+            for json_path in json_paths:
+                basename = os.path.basename(json_path)
 
-            img_name = json_path.replace(self.data_dir + "labelme_data", "").replace(
-                ".json", "").replace("/", " ").replace("\\", " ").strip()
+                frame_num = int(re.findall(r'\d+', basename)[-1])
+                video_name = basename.replace("%d.json" % frame_num, "")
 
-            # Read labels
-            output = load_labelme_data(json_path, SCALE, self.classes)
+                if video_name not in frames:
+                    frames[video_name] = {}
+                frames[video_name][frame_num] = json_path
 
-            # Load image
-            img = load_img(json_path, SCALE, CHANNELS)
+            # Prepare each video
+            positive_pixel_percentages = []
+            for video_name, video_frames in tqdm(frames.items()):
+                selected_dataset_name = "train"
+                for val_video_name in VALIDATION_VIDEOS:
+                    if val_video_name in video_name:
+                        selected_dataset_name = "val"
 
-            # Get which dataset this sample should be in
-            seed = (int(hashlib.sha1(img_name.encode("utf-8")
-                                     ).hexdigest(), 16) + DATASET_SEED) % (1 << 32)
-            rng = np.random.default_rng(seed)
-            dataset_selection_num = rng.random()
-            for dataset, proportion in DATASET_SPLIT.items():
-                if dataset_selection_num < proportion:
-                    selected_dataset_name = dataset
-                    break
-                dataset_selection_num -= proportion
+                # Create paths
+                input_path = os.path.join(
+                    self.training_dir + selected_dataset_name)
+                output_path = input_path + 'annot'
+                os.makedirs(input_path, exist_ok=True)
+                os.makedirs(output_path, exist_ok=True)
 
-            # Create paths
-            input_path = os.path.join(
-                self.training_dir + selected_dataset_name)
-            output_path = input_path + 'annot'
-            os.makedirs(input_path, exist_ok=True)
-            os.makedirs(output_path, exist_ok=True)
+                # For each frame in that video
+                for frame_num, json_path in tqdm(video_frames.items()):
 
-            # Save npy files
-            np_name = img_name + ".npy"
+                    img_name = json_path.replace(self.data_dir + "labelme_data", "").replace(
+                        ".json", "").replace("/", " ").replace("\\", " ").strip()
 
-            if len(output.shape) == 2:
-                output = output[..., np.newaxis]
-            with open(os.path.join(output_path, np_name), 'wb') as f:
-                np.save(f, output)
+                    # Read labels
+                    output = load_labelme_data(json_path, SCALE, self.classes)
+                    positive_pixel_percentages.append(np.mean(output))
 
-            with open(os.path.join(input_path, np_name), 'wb') as f:
-                np.save(f, img)
+                    # Load image
+                    img = load_img(json_path, SCALE, CHANNELS)
+
+                    # Save npy files
+                    np_name = img_name + ".npy"
+
+                    if len(output.shape) == 2:
+                        output = output[..., np.newaxis]
+                    with open(os.path.join(output_path, np_name), 'wb') as f:
+                        np.save(f, output)
+
+                    with open(os.path.join(input_path, np_name), 'wb') as f:
+                        np.save(f, img)
+
+            self.positive_pixel_percentage = np.mean(positive_pixel_percentages)
+            self.prepared = True
 
     def setup(self, stage: Optional[str] = None):
         """Load data. Set variables: self.data_train, self.data_val, self.data_test."""
@@ -248,7 +264,7 @@ class DataModule(LightningDataModule):
         import albumentations as A
         train_transform = [
             A.Resize(480, 640),
-            A.Lambda(image = flip_left_right, mask = flip_channels, p=0.5),
+            A.Lambda(image=flip_left_right, mask=flip_channels, p=0.5),
 
             A.ShiftScaleRotate(scale_limit=0.2, rotate_limit=10, shift_limit=0.2, border_mode=cv2.BORDER_CONSTANT, mask_value=(0,0), value=(0,0,0), p=1),
 

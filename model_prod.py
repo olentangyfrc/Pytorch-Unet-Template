@@ -12,24 +12,31 @@ class SegModel(Module):
             in_channels=in_ch,
             encoder_name=encoder,
             encoder_weights=initial_weights,
-            classes=num_classes,
-            activation='sigmoid'
+            classes=num_classes
         )
+
+        self.sigmoid = torch.nn.Sigmoid()
 
         self.channels = in_ch
 
-    def forward(self, x) -> torch.Tensor:
-        return self.model.forward(x)
+    def forward(self, x, sigmoid=True) -> torch.Tensor:
+        logits = self.model.forward(x)
+        if sigmoid:
+            return self.sigmoid(logits)
+        return logits
 
-    def normalize_image(self, image, **kwargs):
+
+    @staticmethod
+    def normalize_image(image, **kwargs):
         mean = std = 60
-        if self.channels == 3:
+        if image.shape[2] == 3:
             mean = [60, 60, 60]
             std = [60, 60, 60]
 
         return (image - mean) / std
 
-    def fix_shape(self, x, **kwargs):
+    @staticmethod
+    def fix_shape(x, **kwargs):
         if len(x.shape) == 2:
             x = x[..., np.newaxis]
         w_pad = (32 - x.shape[1]) % 32
@@ -37,7 +44,6 @@ class SegModel(Module):
         padded = np.pad(x, ((0, h_pad), (0, w_pad), (0, 0)), constant_values=-1)
 
         return padded.transpose(2, 0, 1).astype('float32')
-        
 
     @staticmethod
     def load_from_checkpoint(path, map_location=None, initial_weights=None, **kwargs):
@@ -52,7 +58,11 @@ class SegModel(Module):
 
         # update keys by dropping `model_prod.`
         for key in list(model_weights):
-            model_weights[key.replace("model_prod.", "")] = model_weights.pop(key)
+            if "model_prod." in key:
+                model_weights[key.replace("model_prod.", "")] = model_weights.pop(key)
+            else:
+                del model_weights[key]
+
 
         model.load_state_dict(model_weights)
 

@@ -6,74 +6,77 @@ import segmentation_models_pytorch as smp
 import albumentations as A
 import torch
 from model_prod import SegModel
-
+from math import sqrt
 
 
 
 class SegModelLightning(LightningModule):
-    def __init__(self, in_ch, num_classes, encoder, lr, initial_weights='imagenet', **kwargs):
+    def __init__(self, in_ch, num_classes, encoder, lr, percent_positive, initial_weights='imagenet', **kwargs):
         super(SegModelLightning, self).__init__()
 
+        # Initialize our low level model
         self.model_prod = SegModel(in_ch, num_classes, encoder, initial_weights)
 
+        # Log our hyperparameters to view in tensorboard
         self.save_hyperparameters()
 
-        self.criterion = smp.utils.losses.DiceLoss()
+        # Initialize our loss function and validation metric
+        self.bce_loss = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor(1/sqrt(percent_positive)))
+        self.iou_metric = smp.utils.metrics.IoU(threshold=0.9)
 
         self.learning_rate = lr
         self.num_classes = num_classes
         self.channels = in_ch
 
-    def forward(self, x) -> torch.Tensor:
-        return self.model_prod.forward(x)
-
+   
     def training_step(self, batch, batch_idx):
+        """ Function that computes the loss for every training step """
         inputs, labels = batch
 
-        outputs = self.model_prod(inputs)
+        # Conpute region that needs to be ignored
+        ignore_mask = labels == 255
 
-        # Compute loss and iou for each class and average them
-        loss = self.criterion(outputs, labels)
+        # Get raw logits
+        outputs = self.model_prod.forward(inputs, sigmoid=False)
 
-        # Log IOU and loss
+        # Apply ignore mask by hard coding those pixels with 0 error
+        outputs[ignore_mask] = -1000 # False detection is a very small logit
+        labels[ignore_mask] = 0
+
+        # Compute BCE loss
+        loss = self.bce_loss(outputs, labels)
+
+        # Log loss
         self.log("train_loss", loss, on_step=False, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         inputs, labels = batch
 
+        # Conpute region that needs to be ignored
+        ignore_mask = labels == 255
+
         # Masks out uncertain pixels. No loss will be computed for them
-        outputs = self.model_prod(inputs)
+        outputs = self(inputs)
 
-        # Compute iou for each class and average
-        intersections = torch.zeros(self.num_classes, device=inputs.device)
-        unions = torch.zeros(self.num_classes, device=inputs.device)
-        for i in range(self.num_classes):
-            pred = outputs[:, i] > 0.5
-            intersection = torch.sum(pred * labels[:, i])
-            intersections[i] += intersection
-            unions[i] += torch.sum(pred) + \
-                torch.sum(labels[:, i]) - intersection
+        # Apply ignore mask by hard coding those pixels with 0 error
+        outputs[ignore_mask] = 0
+        labels[ignore_mask] = 0
 
-        return {'intersections': intersections, 'unions': unions}
+        # Compute iou for our samples
+        iou = self.iou_metric(outputs, labels)
 
-    def validation_epoch_end(self, outputs: EPOCH_OUTPUT) -> None:
-        intersections = torch.zeros(self.num_classes, device=self.device)
-        unions = torch.zeros(self.num_classes, device=self.device)
-        for pred in outputs:
-            intersections += pred['intersections']
-            unions += pred['unions']
+        # Log our IOU
+        self.log('val_iou', iou, prog_bar=True)
 
-        iou = torch.zeros(1, device=self.device)
-        for c in range(self.num_classes):
-            iou += intersections[c] / unions[c] / self.num_classes
-
-        self.log('val_iou', iou.item())
+    def forward(self, x) -> torch.Tensor:
+        return self.model_prod.forward(x)
 
     def configure_optimizers(self):
         return torch.optim.Adam([dict(params=self.model_prod.parameters(), lr=self.learning_rate)])
 
-    def get_preprocessing(self):
+    @staticmethod
+    def get_preprocessing():
         """Generates preprocessing transform
 
         Returns:
@@ -81,17 +84,17 @@ class SegModelLightning(LightningModule):
         """
 
         _transform = [
-            A.Lambda(image=self.model_prod.normalize_image),
-            A.Lambda(image=self.model_prod.fix_shape, mask=self.model_prod.fix_shape),
+            A.Lambda(image=SegModel.normalize_image),
+            A.Lambda(image=SegModel.fix_shape, mask=SegModel.fix_shape),
         ]
 
         return A.Compose(_transform)
-
+    
     @staticmethod
     def add_model_specific_args(parent_parser):
         # All command line arguments for the model
-        parser = parent_parser.add_argument_group("LitSegModel")
+        parser = parent_parser.add_argument_group("Model")
         parser.add_argument(
             '--encoder', type=str, default='mobilenet_v2', choices=smp.encoders.encoders.keys())
-        parser.add_argument('--lr', type=float, default=0.00005)
+        parser.add_argument('--lr', type=float, default=0.0001)
         return parent_parser

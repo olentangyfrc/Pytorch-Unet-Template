@@ -39,6 +39,7 @@ BENCHMARK = True if GPUS is not None else False
 
 # How many samples to look at at a time.
 # Large batch size will cause memory errors
+# If you get an out of memory, divide this number by 2
 BATCH_SIZE = 8
 
 # Number of data loader workers. More workers uses more RAM but may be faster.
@@ -66,7 +67,7 @@ if __name__ == "__main__":
     parser = SegModelLightning.add_model_specific_args(parser)
     parser = Trainer.add_argparse_args(parser)
 
-    # Default from command line args
+    # Set command line arg defaults
     # Any command line args you dont want to specify every time list here
     parser.set_defaults(
         gpus=GPUS,
@@ -76,17 +77,9 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Initialize model from command line args
-    dict_args = vars(args)
-    model = SegModelLightning(
-        in_ch=CHANNELS,
-        num_classes=len(CLASSES),
-        **dict_args
-    )
-
     # Initialize data module and make sure npy files are generated
     datamodule = DataModule(
-        preprocessing_augmentation=model.get_preprocessing(),
+        preprocessing_augmentation=SegModelLightning.get_preprocessing(),
         data_dir=DATA_DIR,
         batch_size=BATCH_SIZE,
         num_workers=NUM_WORKERS,
@@ -94,6 +87,15 @@ if __name__ == "__main__":
         classes=CLASSES
     )
     datamodule.prepare_data()
+
+    # Initialize model from command line args
+    dict_args = vars(args)
+    model = SegModelLightning(
+        in_ch=CHANNELS,
+        num_classes=len(CLASSES),
+        percent_positive=datamodule.positive_pixel_percentage,
+        **dict_args
+    )
 
     # Init logger and add example samples
     tb_logger = pl_loggers.TensorBoardLogger('logs/')
@@ -112,6 +114,7 @@ if __name__ == "__main__":
         "Validation label", img_tensor=labels_to_rgb(validation_sample[1][0]))
 
     # Stop early if val_iou hasn't improved
+    # Will wait patience epochs before stopping
     early_stop_callback = EarlyStopping(
         monitor='val_iou',
         min_delta=0.00,
@@ -128,7 +131,7 @@ if __name__ == "__main__":
     )
 
     # Init trainer from command line args
-    trainer = Trainer.from_argparse_args(
+    trainer: Trainer = Trainer.from_argparse_args(
         args,
         max_epochs=10000,
         logger=tb_logger,
@@ -139,4 +142,4 @@ if __name__ == "__main__":
     trainer.fit(model, datamodule)
 
     # Log best val_iou for this set of hyperparameters
-    trainer.logger.metrics({'hp_metric': early_stop_callback.best_score})
+    trainer.logger.log_metrics({'hp_metric': early_stop_callback.best_score})

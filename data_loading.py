@@ -7,10 +7,11 @@ import glob
 
 
 # Load in an image
-def load_img(path: str, scale, channels):
+def load_img(path: str, scale: float, channels: int) -> np.ndarray:
     with open(path) as f:
         data = json.load(f)
 
+    # Load in the image and scale it if necessary
     img_files = glob.glob(path.replace("json", "*"))
     img_path = [
         file_path for file_path in img_files if "json" not in file_path][0]
@@ -27,12 +28,13 @@ def load_img(path: str, scale, channels):
     return image
 
 
-def load_labelme_data(path, scale, classes):
+def load_labelme_data(path: str, scale: float, classes: int) -> np.ndarray:
+    """ Reads in labelme data and converts it to a label map """
+
     with open(path) as f:
+        # Open file and init the output array
         data = json.load(f)
-
         h, w = int(data["imageHeight"] * scale), int(data["imageWidth"] * scale)
-
         output = np.zeros((len(classes), h, w), 'uint8')
 
         def draw_shape(img, shape, class_indicies, color):
@@ -52,12 +54,13 @@ def load_labelme_data(path, scale, classes):
                     img[class_idx] = cv2.fillPoly(
                         img[class_idx], [points], color)
                 elif shape['shape_type'] == 'line':
+                    length = np.linalg.norm(points[0] - points[1])
                     img[class_idx] = cv2.line(
-                        img[class_idx], points[0], points[1], color, int((h + w) / 300))
+                        img[class_idx], points[0], points[1], color, int(length))
                 else:
                     raise(Exception("Unknown shape type"))
 
-        # Now do everything else
+        # Draw each shape in the output matrix
         for shape in data['shapes']:
             class_indicies = []
             for idx, class_name in enumerate(classes):
@@ -65,5 +68,10 @@ def load_labelme_data(path, scale, classes):
                     class_indicies.append(idx)
 
             draw_shape(output, shape, class_indicies, 1)
+
+        for shape in data['shapes']:
+            if shape['label'] == '__ignore__':
+                class_indicies = range(len(classes))
+                draw_shape(output, shape, class_indicies, 255)
 
         return np.moveaxis(output, 0, -1)
