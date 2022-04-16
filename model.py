@@ -40,8 +40,8 @@ class SegModelLightning(LightningModule):
         outputs = self.model_prod.forward(inputs, sigmoid=False)
 
         # Apply ignore mask by hard coding those pixels with 0 error
-        outputs[ignore_mask] = -1000 # False detection is a very small logit
-        labels[ignore_mask] = 0
+        outputs[ignore_mask] = 0
+        labels[ignore_mask] = 0.5
 
         # Compute BCE loss
         loss = self.bce_loss(outputs, labels)
